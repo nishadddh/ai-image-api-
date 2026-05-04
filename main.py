@@ -6,7 +6,6 @@ import os
 
 app = FastAPI()
 
-# allow frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,7 +15,7 @@ app.add_middleware(
 )
 
 API_URL = "https://api-inference.huggingface.co/models/stabilityai/sdxl-turbo"
-HF_TOKEN = os.getenv("HF_TOKEN")  # secure token
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 @app.get("/")
 def home():
@@ -28,8 +27,22 @@ def generate(data: dict):
 
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
-    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+    response = requests.post(
+        API_URL,
+        headers=headers,
+        json={
+            "inputs": prompt,
+            "parameters": {"num_inference_steps": 1}
+        }
+    )
 
-    image_base64 = base64.b64encode(response.content).decode("utf-8")
+    # 🔥 FIX: check if response is image or error
+    content_type = response.headers.get("content-type")
 
-    return {"image": image_base64}
+    if "image" in content_type:
+        image_base64 = base64.b64encode(response.content).decode("utf-8")
+        return {"image": image_base64}
+    else:
+        return {
+            "error": response.json()
+        }
