@@ -14,7 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-API_URL = "https://api-inference.huggingface.co/models/stabilityai/sdxl-turbo"
+API_URL = "https://api-inference.huggingface.co/stabilityai/sdxl-turbo"
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 @app.get("/")
