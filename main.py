@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import requests
+from huggingface_hub import InferenceClient
 import base64
 import os
+import io
 
 app = FastAPI()
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,8 +16,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
-HF_TOKEN = os.getenv("HF_TOKEN")
+# ✅ NEW CLIENT (important)
+client = InferenceClient(
+    provider="nscale",
+    api_key=os.getenv("HF_TOKEN"),
+)
 
 @app.get("/")
 def home():
@@ -23,26 +28,24 @@ def home():
 
 @app.post("/generate")
 def generate(data: dict):
-    prompt = data["prompt"]
+    prompt = data.get("prompt")
 
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    if not prompt:
+        return {"error": "Prompt required"}
 
-    response = requests.post(
-        API_URL,
-        headers=headers,
-        json={
-            "inputs": prompt,
-            "parameters": {"num_inference_steps": 1}
-        }
-    )
+    try:
+        # 🔥 Generate image using FLUX
+        image = client.text_to_image(
+            prompt,
+            model="black-forest-labs/FLUX.1-schnell",
+        )
 
-    # 🔥 FIX: check if response is image or error
-    content_type = response.headers.get("content-type")
+        # Convert PIL image → base64
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        img_str = base64.b64encode(buffer.getvalue()).decode()
 
-    if "image" in content_type:
-        image_base64 = base64.b64encode(response.content).decode("utf-8")
-        return {"image": image_base64}
-    else:
-        return {
-            "error": response.json()
-        }
+        return {"image": img_str}
+
+    except Exception as e:
+        return {"error": str(e)}
