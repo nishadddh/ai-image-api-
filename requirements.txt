@@ -1,6 +1,4 @@
 flask
 flask-cors
-huggingface_hub
-Pillow
+requests
 gunicorn
- 
