@@ -1,16 +1,14 @@
 import os
+import io
 import base64
-import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from huggingface_hub import InferenceClient
 
 app = Flask(__name__)
 CORS(app)
 
 HF_TOKEN = os.environ.get("HF_TOKEN")
-
-# ✅ Free HF Inference API — no provider, no Replicate, no billing
-API_URL = "https://api-inference.huggingface.co/stabilityai/stable-diffusion-xl-base-1.0"
 
 @app.route("/generate", methods=["POST"])
 def generate_image():
@@ -23,35 +21,23 @@ def generate_image():
     if not HF_TOKEN:
         return jsonify({"error": "HF_TOKEN not configured on server"}), 500
 
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}"
-    }
-
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "num_inference_steps": 25,
-            "width": 512,
-            "height": 512
-        }
-    }
-
     try:
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=120)
+        client = InferenceClient(
+            provider="hf-inference",  # ✅ HF's own free servers
+            api_key=HF_TOKEN,
+        )
 
-        # Model is cold starting — tell frontend to retry
-        if response.status_code == 503:
-            return jsonify({"error": "Model is warming up, please wait 20 seconds and try again"}), 503
+        image = client.text_to_image(
+            prompt,
+            model="stabilityai/stable-diffusion-xl-base-1.0",
+        )
 
-        if response.status_code != 200:
-            return jsonify({"error": f"HF error {response.status_code}: {response.text}"}), response.status_code
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-        # HF returns raw image bytes
-        image_b64 = base64.b64encode(response.content).decode("utf-8")
         return jsonify({"image": image_b64})
 
-    except requests.exceptions.Timeout:
-        return jsonify({"error": "Timed out, please try again"}), 504
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -60,8 +46,8 @@ def generate_image():
 def health():
     return jsonify({
         "status": "ok",
-        "model": "runwayml/stable-diffusion-v1-5",
-        "provider": "huggingface-free"
+        "model": "stabilityai/stable-diffusion-xl-base-1.0",
+        "provider": "hf-inference"
     })
 
 
