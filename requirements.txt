@@ -2,3 +2,7 @@ fastapi
 uvicorn
 requests
 huggingface_hub
+flask
+flask-cors
+requests
+gunicorn
