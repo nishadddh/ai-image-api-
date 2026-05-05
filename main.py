@@ -23,7 +23,7 @@ def generate_image():
 
     try:
         client = InferenceClient(
-            provider="hf-inference",  # ✅ HF's own free servers
+            provider="wavespeed",   # ✅ works with HF token, routes through HF
             api_key=HF_TOKEN,
         )
 
@@ -46,8 +46,8 @@ def generate_image():
 def health():
     return jsonify({
         "status": "ok",
-        "model": "stabilityai/stable-diffusion-xl-base-1.0",
-        "provider": "hf-inference"
+        "model": "black-forest-labs/FLUX.1-dev",
+        "provider": "wavespeed"
     })
 
 
