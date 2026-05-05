@@ -8,7 +8,7 @@ from huggingface_hub import InferenceClient
 app = Flask(__name__)
 CORS(app)
 
-HF_TOKEN = os.environ.get("HF_TOKEN")  # Set this in Render environment variables
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
 @app.route("/generate", methods=["POST"])
 def generate_image():
@@ -23,18 +23,15 @@ def generate_image():
 
     try:
         client = InferenceClient(
-            provider="nscale",
+            provider="fal-ai",   # ✅ changed from nscale → fal-ai
             api_key=HF_TOKEN,
         )
 
-        # Returns a PIL.Image object
         image = client.text_to_image(
             prompt,
             model="stabilityai/stable-diffusion-xl-base-1.0",
-            num_inference_steps=5,
         )
 
-        # Convert PIL image → base64
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         image_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
@@ -47,7 +44,7 @@ def generate_image():
 
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "model": "stabilityai/stable-diffusion-xl-base-1.0", "provider": "nscale"})
+    return jsonify({"status": "ok", "model": "stabilityai/stable-diffusion-xl-base-1.0", "provider": "fal-ai"})
 
 
 if __name__ == "__main__":
