@@ -1,15 +1,16 @@
 import os
-import io
 import base64
 import requests
-import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
-REPLICATE_TOKEN = os.environ.get("REPLICATE_TOKEN")
+HF_TOKEN = os.environ.get("HF_TOKEN")
+
+# ✅ Free HF Inference API — no provider, no Replicate, no billing
+API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
 
 @app.route("/generate", methods=["POST"])
 def generate_image():
@@ -19,54 +20,38 @@ def generate_image():
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
 
-    if not REPLICATE_TOKEN:
-        return jsonify({"error": "REPLICATE_TOKEN not configured on server"}), 500
+    if not HF_TOKEN:
+        return jsonify({"error": "HF_TOKEN not configured on server"}), 500
+
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}"
+    }
+
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "num_inference_steps": 25,
+            "width": 512,
+            "height": 512
+        }
+    }
 
     try:
-        headers = {
-            "Authorization": f"Bearer {REPLICATE_TOKEN}",
-            "Content-Type": "application/json",
-            "Prefer": "wait"
-        }
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=120)
 
-        payload = {
-            "version": "39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
-            "input": {
-                "prompt": prompt,
-                "num_inference_steps": 25,
-                "width": 1024,
-                "height": 1024
-            }
-        }
+        # Model is cold starting — tell frontend to retry
+        if response.status_code == 503:
+            return jsonify({"error": "Model is warming up, please wait 20 seconds and try again"}), 503
 
-        response = requests.post(
-            "https://api.replicate.com/v1/predictions",
-            headers=headers,
-            json=payload,
-            timeout=120
-        )
+        if response.status_code != 200:
+            return jsonify({"error": f"HF error {response.status_code}: {response.text}"}), response.status_code
 
-        if response.status_code not in [200, 201]:
-            return jsonify({"error": f"Replicate error: {response.text}"}), response.status_code
-
-        result = response.json()
-
-        # Poll until done
-        while result.get("status") not in ["succeeded", "failed", "canceled"]:
-            time.sleep(2)
-            poll_resp = requests.get(result["urls"]["get"], headers=headers, timeout=60)
-            result = poll_resp.json()
-
-        if result.get("status") != "succeeded":
-            return jsonify({"error": "Generation failed: " + str(result.get("error"))}), 500
-
-        # Download image and convert to base64
-        image_url = result["output"][0]
-        img_response = requests.get(image_url, timeout=60)
-        image_b64 = base64.b64encode(img_response.content).decode("utf-8")
-
+        # HF returns raw image bytes
+        image_b64 = base64.b64encode(response.content).decode("utf-8")
         return jsonify({"image": image_b64})
 
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Timed out, please try again"}), 504
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -75,8 +60,8 @@ def generate_image():
 def health():
     return jsonify({
         "status": "ok",
-        "model": "stability-ai/sdxl",
-        "provider": "replicate"
+        "model": "runwayml/stable-diffusion-v1-5",
+        "provider": "huggingface-free"
     })
 
 
