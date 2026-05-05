@@ -10,7 +10,7 @@ CORS(app)
 HF_TOKEN = os.environ.get("HF_TOKEN")
 
 # ✅ Free HF Inference API — no provider, no Replicate, no billing
-API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+API_URL = "https://api-inference.huggingface.co/stabilityai/stable-diffusion-xl-base-1.0"
 
 @app.route("/generate", methods=["POST"])
 def generate_image():
