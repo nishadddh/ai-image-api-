@@ -29,7 +29,7 @@ def generate_image():
 
         image = client.text_to_image(
             prompt,
-            model="stabilityai/stable-diffusion-xl-base-1.0",
+            model="black-forest-labs/FLUX.1-dev",
         )
 
         buffer = io.BytesIO()
