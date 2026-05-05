@@ -1,18 +1,14 @@
 import os
 import io
 import base64
+import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from huggingface_hub import InferenceClient
 
 app = Flask(__name__)
 CORS(app)
 
-HF_TOKEN = os.environ.get("HF_TOKEN")
-
-# ✅ Simple direct approach — no provider, just HF token
-# Same method used in local gradio apps, works for all internet users via your server
-model_id = "stabilityai/stable-diffusion-xl-base-1.0"
+REPLICATE_TOKEN = os.environ.get("REPLICATE_TOKEN")
 
 @app.route("/generate", methods=["POST"])
 def generate_image():
@@ -22,18 +18,54 @@ def generate_image():
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
 
-    if not HF_TOKEN:
-        return jsonify({"error": "HF_TOKEN not configured on server"}), 500
+    if not REPLICATE_TOKEN:
+        return jsonify({"error": "REPLICATE_TOKEN not configured on server"}), 500
 
     try:
-        # Exactly like the local gradio code — no provider argument
-        client = InferenceClient(model_id, token=HF_TOKEN)
-        image = client.text_to_image(prompt)
+        headers = {
+            "Authorization": f"Bearer {REPLICATE_TOKEN}",
+            "Content-Type": "application/json",
+            "Prefer": "wait"  # wait for result directly, no polling needed
+        }
 
-        # Convert PIL Image → base64 for frontend
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        image_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        # Create prediction
+        payload = {
+            "version": "7762fd07cf82c948538e41f63f77d685e02b063e37981ef7dac9cb7c403def46",  # SDXL base 1.0
+            "input": {
+                "prompt": prompt,
+                "num_inference_steps": 25,
+                "width": 1024,
+                "height": 1024
+            }
+        }
+
+        response = requests.post(
+            "https://api.replicate.com/v1/predictions",
+            headers=headers,
+            json=payload,
+            timeout=120
+        )
+
+        if response.status_code not in [200, 201]:
+            return jsonify({"error": f"Replicate error: {response.text}"}), response.status_code
+
+        result = response.json()
+
+        # If still processing, poll until done
+        while result.get("status") not in ["succeeded", "failed", "canceled"]:
+            poll_url = result["urls"]["get"]
+            poll_resp = requests.get(poll_url, headers=headers, timeout=60)
+            result = poll_resp.json()
+
+        if result.get("status") != "succeeded":
+            return jsonify({"error": "Image generation failed on Replicate"}), 500
+
+        # Get image URL from output
+        image_url = result["output"][0]
+
+        # Download image and convert to base64
+        img_response = requests.get(image_url, timeout=60)
+        image_b64 = base64.b64encode(img_response.content).decode("utf-8")
 
         return jsonify({"image": image_b64})
 
@@ -43,7 +75,11 @@ def generate_image():
 
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "model": model_id})
+    return jsonify({
+        "status": "ok",
+        "model": "stabilityai/stable-diffusion-xl-base-1.0",
+        "provider": "replicate"
+    })
 
 
 if __name__ == "__main__":
