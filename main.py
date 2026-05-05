@@ -2,6 +2,7 @@ import os
 import io
 import base64
 import requests
+import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -25,12 +26,11 @@ def generate_image():
         headers = {
             "Authorization": f"Bearer {REPLICATE_TOKEN}",
             "Content-Type": "application/json",
-            "Prefer": "wait"  # wait for result directly, no polling needed
+            "Prefer": "wait"
         }
 
-        # Create prediction
         payload = {
-            "version": "7762fd07cf82c948538e41f63f77d685e02b063e37981ef7dac9cb7c403def46",  # SDXL base 1.0
+            "version": "39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
             "input": {
                 "prompt": prompt,
                 "num_inference_steps": 25,
@@ -51,19 +51,17 @@ def generate_image():
 
         result = response.json()
 
-        # If still processing, poll until done
+        # Poll until done
         while result.get("status") not in ["succeeded", "failed", "canceled"]:
-            poll_url = result["urls"]["get"]
-            poll_resp = requests.get(poll_url, headers=headers, timeout=60)
+            time.sleep(2)
+            poll_resp = requests.get(result["urls"]["get"], headers=headers, timeout=60)
             result = poll_resp.json()
 
         if result.get("status") != "succeeded":
-            return jsonify({"error": "Image generation failed on Replicate"}), 500
-
-        # Get image URL from output
-        image_url = result["output"][0]
+            return jsonify({"error": "Generation failed: " + str(result.get("error"))}), 500
 
         # Download image and convert to base64
+        image_url = result["output"][0]
         img_response = requests.get(image_url, timeout=60)
         image_b64 = base64.b64encode(img_response.content).decode("utf-8")
 
@@ -77,7 +75,7 @@ def generate_image():
 def health():
     return jsonify({
         "status": "ok",
-        "model": "stabilityai/stable-diffusion-xl-base-1.0",
+        "model": "stability-ai/sdxl",
         "provider": "replicate"
     })
 
