@@ -1,14 +1,14 @@
 import os
-import requests
+import io
 import base64
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from huggingface_hub import InferenceClient
 
 app = Flask(__name__)
-CORS(app)  # Allow requests from your InfinityFree frontend
+CORS(app)
 
 HF_TOKEN = os.environ.get("HF_TOKEN")  # Set this in Render environment variables
-MODEL_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
 
 @app.route("/generate", methods=["POST"])
 def generate_image():
@@ -21,40 +21,33 @@ def generate_image():
     if not HF_TOKEN:
         return jsonify({"error": "HF_TOKEN not configured on server"}), 500
 
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "num_inference_steps": 4,   # schnell only needs 4 steps
-            "width": 512,
-            "height": 512
-        }
-    }
-
     try:
-        response = requests.post(MODEL_URL, headers=headers, json=payload, timeout=60)
+        client = InferenceClient(
+            provider="nscale",
+            api_key=HF_TOKEN,
+        )
 
-        if response.status_code == 503:
-            return jsonify({"error": "Model is loading, please wait 20 seconds and retry"}), 503
+        # Returns a PIL.Image object
+        image = client.text_to_image(
+            prompt,
+            model="stabilityai/stable-diffusion-xl-base-1.0",
+            num_inference_steps=5,
+        )
 
-        if response.status_code != 200:
-            return jsonify({"error": f"HuggingFace error: {response.text}"}), response.status_code
-
-        # Response is raw image bytes — convert to base64
-        image_bytes = response.content
-        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        # Convert PIL image → base64
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
         return jsonify({"image": image_b64})
 
-    except requests.exceptions.Timeout:
-        return jsonify({"error": "Request timed out. Model may be cold-starting, try again."}), 504
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "message": "Image generation API is running"})
+    return jsonify({"status": "ok", "model": "stabilityai/stable-diffusion-xl-base-1.0", "provider": "nscale"})
 
 
 if __name__ == "__main__":
