@@ -6,3 +6,8 @@ flask
 flask-cors
 requests
 gunicorn
+flask-cors
+huggingface_hub
+Pillow
+gunicorn
+ 
