@@ -10,6 +10,10 @@ CORS(app)
 
 HF_TOKEN = os.environ.get("HF_TOKEN")
 
+# ✅ Simple direct approach — no provider, just HF token
+# Same method used in local gradio apps, works for all internet users via your server
+model_id = "stabilityai/stable-diffusion-xl-base-1.0"
+
 @app.route("/generate", methods=["POST"])
 def generate_image():
     data = request.get_json()
@@ -22,16 +26,11 @@ def generate_image():
         return jsonify({"error": "HF_TOKEN not configured on server"}), 500
 
     try:
-        client = InferenceClient(
-            provider="replicate",   # ✅ works with HF token directly
-            api_key=HF_TOKEN,
-        )
+        # Exactly like the local gradio code — no provider argument
+        client = InferenceClient(model_id, token=HF_TOKEN)
+        image = client.text_to_image(prompt)
 
-        image = client.text_to_image(
-            prompt,
-            model="stabilityai/stable-diffusion-xl-base-1.0",
-        )
-
+        # Convert PIL Image → base64 for frontend
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         image_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
@@ -44,7 +43,7 @@ def generate_image():
 
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "model": "stabilityai/stable-diffusion-xl-base-1.0", "provider": "replicate"})
+    return jsonify({"status": "ok", "model": model_id})
 
 
 if __name__ == "__main__":
