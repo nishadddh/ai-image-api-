@@ -23,7 +23,7 @@ def generate_image():
 
     try:
         client = InferenceClient(
-            provider="fal-ai",   # ✅ changed from nscale → fal-ai
+            provider="replicate",   # ✅ works with HF token directly
             api_key=HF_TOKEN,
         )
 
@@ -44,7 +44,7 @@ def generate_image():
 
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "model": "stabilityai/stable-diffusion-xl-base-1.0", "provider": "fal-ai"})
+    return jsonify({"status": "ok", "model": "stabilityai/stable-diffusion-xl-base-1.0", "provider": "replicate"})
 
 
 if __name__ == "__main__":
